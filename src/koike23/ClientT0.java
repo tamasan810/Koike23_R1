@@ -75,10 +75,11 @@ public class ClientT0 extends JFrame implements Runnable {
 		}
 				);
 
-		c.threadsRun( 2 ); // 引数はスレッドの数    
+		c.threadsRun(2); // 引数はスレッドの数    
 	}
 
 	public void threadsRun( int id ){
+		display.setText("ClientT0 start\n");
 		for ( int i=0; i< id; i++) threads[i] = new Thread(this);
 		for ( int i=0; i< id; i++) threads[i].start();
 
@@ -95,15 +96,14 @@ public class ClientT0 extends JFrame implements Runnable {
 	}
 
 	public void run(){
-
 		int id =0;
 		Thread currentThread = Thread.currentThread();
 		for ( int i = 0; i< threads.length; i++){
 			if( threads[i] == currentThread ) id = i;
-		}        
+		}
 
 		try{
-			display.setText( "Attempting connection to server" + id + "\n" );
+			display.append( "Attempting connection to server" + id + "\n" );
 			// Socketのインスタンスを作成
 			// ローカルホストへのソケット接続(接続先を指定)
 			// Socket connection = new Socket(サーバアドレス, ポート番号);
@@ -112,7 +112,7 @@ public class ClientT0 extends JFrame implements Runnable {
 			//client = new Socket(InetAddress.getByName( "133.25.83.140" ), 5030 );
 
 			display.append( "Connected to: " +
-					clientSocket[id].getInetAddress().getHostName() );
+					clientSocket[id].getInetAddress().getHostName() +"\n");
 
 			output[id] = new ObjectOutputStream( clientSocket[id].getOutputStream() );
 			output[id].flush();
@@ -178,17 +178,19 @@ public class ClientT0 extends JFrame implements Runnable {
 
 
 	private void sendData( String s, int id){
-
-
+		if(id == 0){
+			ServerT0.testN = id;			
+		} else{
+			ServerT1.testN = id;			
+		}
 		try{
-
 			output[id].writeObject( "CLIENT>>> " + s );
 
 			output[id].flush();
 			display.append( "\nCLIENT>>> " + s );
 			if( s.equals( "TERMINATE") ){
-
 				display.append( "\n You terminated connection to Server" + id );
+				// TERMINATEしたテキストフィールドは編集不可にする
 				enter[id].setEditable( false );
 				output[id].close();
 				input[id].close();

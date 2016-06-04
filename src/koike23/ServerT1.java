@@ -7,132 +7,168 @@ import java.awt.event.*;
 
 import javax.swing.*;
 
-public class ServerT1 extends JFrame {
-   private JTextField enter;
-   private JTextArea display;
-   ObjectOutputStream output;
-   ObjectInputStream input;
-   private Thread threads[]= new Thread[2];
+public class ServerT1 extends JFrame implements Runnable{
+	private final int NUMBER = 2;
+	private JTextField enter;
+	private JTextArea display;
+	ObjectOutputStream output[] = new ObjectOutputStream[NUMBER];
+	ObjectInputStream input[] = new ObjectInputStream[NUMBER];
+//	ObjectOutputStream output;
+//	ObjectInputStream input;
+	private final int PORT_NUMBER = 5031;
+	int count_Client = 0;
+	private Socket sockets[] = new Socket[NUMBER];
+	private Thread threads[]= new Thread[NUMBER];
+	static int testN;
 
-   public ServerT1(){
-      super( "ServerT1" );
+	// コンストラクタ
+	public ServerT1(){
+		super( "ServerT1" );
 
-      Container c = getContentPane();
+		Container c = getContentPane();
 
-      enter= new JTextField();
-      enter.setEditable(false);
-      enter.addActionListener(
-          new ActionListener(){
-                 public void actionPerformed( ActionEvent ae ){
-                   sendData( ae.getActionCommand() );
-                 }
-              }
+		enter= new JTextField();
+		enter.setEditable(false);
+		enter.addActionListener(
+				new ActionListener(){
+					public void actionPerformed( ActionEvent ae ){
+						sendData( ae.getActionCommand() );
+					}
+				}
 
-      );
+				);
 
-      c.add( enter, BorderLayout.NORTH );
+		c.add( enter, BorderLayout.NORTH );
 
-      display = new JTextArea();
-      c.add( new JScrollPane( display ), BorderLayout.CENTER );
+		display = new JTextArea();
+		c.add( new JScrollPane( display ), BorderLayout.CENTER );
 
+		setSize( 300, 150 );
+		//  show();
+		setVisible(true);
+	}
 
+	public static void main ( String args[]) {
+		ServerT1 s = new ServerT1();
+		s.addWindowListener( new WindowAdapter(){
+			public void windowClosing( WindowEvent we ){
+				System.exit(0); }
 
-      setSize( 300, 150 );
-      setVisible(true);
-   }
-   
-   public static void main ( String args[]) {
-       ServerT1 s = new ServerT1();
-       s.addWindowListener( new WindowAdapter(){
-           public void windowClosing( WindowEvent we ){
-               System.exit(0); }
+		});
 
-       }
+		s.runServer();
 
-       );
-       s.runServer();
+	}
 
-   }
+	public void runServer() {
+		ServerSocket serverSocket = null;
 
-   public void runServer() {
+		try{
+			// サーバソケットの作成
+			// サーバソケットは1つでよい
+			// ポート番号, 最大受付可能接続数
+			serverSocket = new ServerSocket(PORT_NUMBER, 100);
 
-      ServerSocket server;
-      Socket connection;
+			display.setText(PORT_NUMBER +"が起動しました(port="
+					+ serverSocket.getLocalPort() + ")\n");
 
-      int counter = 1;
+			while (true ){
+				display.append( "Waiting for connection\n" );
+				// ServerSocketはソケット接続待ちの状態になる
+				// クライアントが接続してくるまでプログラムはこれ以上先に進まない
+				// ソケットをスレッドに渡す必要がある。
+				sockets[count_Client] = serverSocket.accept();
+				++count_Client;				
+				threads[count_Client - 1] = new Thread(this);
+				threads[count_Client - 1].start();
+			}
 
-      try{
-         server = new ServerSocket( 5031, 100 );
+		}
+		// 入力の途中で、予想外のストリームの終了があったことを表すシグナル
+		catch( EOFException eof ){
+			System.out.println( "Client terminated connection" );
+		}
 
+		catch( IOException io ){
+			io.printStackTrace();
+		}
 
+	}
 
-         while (true ){
-           
-             display.setText( "Waiting for connection\n" );
-             connection = server.accept();
+	private void sendData( String s ){
+		try{
+			output[count_Client].writeObject( "ServerT1>>> " + s );  // オブジェクトにストリームを書き込む
+			output[count_Client].flush(); // ストリームをフラッシュする
 
-             display.append( "Connection " + counter + ":  " +
-                   " received from: " +
-                   connection.getInetAddress().getHostName() );
+		}
 
-             output = new ObjectOutputStream( connection.getOutputStream() );
-             output.flush();
-             input = new ObjectInputStream( connection.getInputStream() );
-             display.append( "\nGot I/O Streams\n" );
-             String message = "ServerT1>>> Connection successful" ;
-             output.writeObject( message );
+		catch( IOException cnfex ){
+			display.append( "\nError writing object" );
 
+		}
 
-             output.flush();
-             enter.setEditable( true );
+	}
 
-             do{
-               try{
-                  message = (String) input.readObject();
-                  display.append( "\n" + message );
-                  display.setCaretPosition(
-                       display.getText().length() );
+	@Override
+	public void run() {
+		int id =0;
+		Thread currentThread = Thread.currentThread();
+		for ( int i = 0; i< threads.length; i++){
+			if( threads[i] == currentThread ) id = i;
+		}
+		
+		Socket socket = sockets[id];
 
-               }
-               catch( ClassNotFoundException cnfex ){
-                  display.append( "\nUnknown object type received" );
-               }
+		try{
+			// ソケットの情報を表示
+			// ソケットの各種情報はgetInetAddress().getHostName()
+			// ホストの情報、アドレス情報獲得
+			display.append( "Connection " + (count_Client - 1) + ":  " +
+					" received from: " +
+					socket.getInetAddress().getHostName() );
 
-             } while ( !message.equals( "CLIENT>>> TERMINATE" ) );
+			output[count_Client - 1] = new ObjectOutputStream( socket.getOutputStream() );
+			output[count_Client - 1].flush(); // ストリームをフラッシュする
+			input[count_Client - 1] = new ObjectInputStream( socket.getInputStream() );
+			display.append( "\nGot I/O Streams\n" );
+			String message = "ServerT1>>> Connection successful" ;
+			output[count_Client - 1].writeObject( message ); // オブジェクトにストリームを書き込む
 
-             display.append( "\nUser terminated connection" );
-             enter.setEditable( false );
-             output.close();
-             input.close();
-             connection.close();
+			output[count_Client - 1].flush(); // ストリームをフラッシュする
+			enter.setEditable( true );
+			//count_Client++; // このタイミングダメ
 
-             ++counter;
-         }
+			do{
+				try{
+					// message = ...で止まっている
+					System.out.println(testN);
+					message = (String) input[testN].readObject(); // エラー
+					display.append("id = " +String.valueOf(id)+ message + "\n");
+					display.append( "\n" + message );
+					display.setCaretPosition(
+							display.getText().length() );
 
-        }
-        catch( EOFException eof ){
-            System.out.println( "Client terminated connection" );
-        }
+				}
+				catch( ClassNotFoundException cnfex ){
+					display.append( "\nUnknown object type received" );
+				}
 
-        catch( IOException io ){
-            io.printStackTrace();
-        }
+			} while ( !message.equals( "CLIENT>>> TERMINATE" ) );
 
+			display.append( "\nUser terminated connection" );
+			enter.setEditable( false ); // 編集不可にする
+			output[testN].close();
+			input[testN].close();
+			socket.close();
+		}
+		catch( EOFException eof ){
+			System.out.println( "Client terminated connection" );
+		}
 
-   }
+		catch( IOException io ){
+			io.printStackTrace();
+		}
 
-   private void sendData( String s ){
-      try{
-         output.writeObject( "ServerT1>>> " + s );
-         output.flush();
-
-      }
-
-      catch( IOException cnfex ){
-          display.append( "\nError writing object" );
-
-      }
-
-   }
+	}
 
 }
